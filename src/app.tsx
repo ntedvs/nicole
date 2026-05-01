@@ -13,7 +13,8 @@ import { useAuthActions } from "@convex-dev/auth/react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Routes, Route, useParams, useNavigate, NavLink } from "react-router"
 import type { Id } from "../convex/_generated/dataModel"
-import { Editor } from "./Editor"
+import { Editor } from "./editor"
+import { CaretDown, CaretRight, Plus } from "@phosphor-icons/react"
 
 export default function App() {
   return (
@@ -94,6 +95,29 @@ function Workspace() {
     [notes, search],
   )
 
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string | null, typeof filtered>()
+    const ids = new Set(filtered.map((n) => n._id))
+    for (const n of filtered) {
+      // If parent is filtered out by search, hoist to root so result is visible.
+      const key = n.parentId && ids.has(n.parentId as unknown as Id<"notes">) ? n.parentId : null
+      const arr = map.get(key as string | null) ?? []
+      arr.push(n)
+      map.set(key as string | null, arr)
+    }
+    return map
+  }, [filtered])
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const toggleCollapsed = (id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
   const openByTitle = async (title: string) => {
     const trimmed = title.trim()
     if (!trimmed) return
@@ -106,8 +130,15 @@ function Workspace() {
     }
   }
 
-  const newNote = async () => {
-    const id = await createNote({ title: "Untitled" })
+  const newNote = async (parentId?: Id<"notes">) => {
+    const id = await createNote({ title: "Untitled", parentId })
+    if (parentId) {
+      setCollapsed((prev) => {
+        const next = new Set(prev)
+        next.delete(parentId as unknown as string)
+        return next
+      })
+    }
     navigate(`/notes/${id}`)
   }
 
@@ -132,28 +163,22 @@ function Workspace() {
           </button>
         </div>
         <ul className="flex-1 overflow-y-auto py-2">
-          {filtered.map((n) => (
-            <li key={n._id}>
-              <NavLink
-                to={`/notes/${n._id}`}
-                className={({ isActive }) =>
-                  `block w-full text-left px-4 py-2 text-sm truncate hover:bg-stone-100 ${
-                    isActive ? "bg-stone-100 font-medium" : ""
-                  }`
-                }
-              >
-                {n.title || "Untitled"}
-              </NavLink>
-            </li>
-          ))}
+          <NoteTree
+            parentId={null}
+            depth={0}
+            childrenByParent={childrenByParent}
+            collapsed={collapsed}
+            onToggle={toggleCollapsed}
+            onAddChild={(pid) => void newNote(pid)}
+          />
           {filtered.length === 0 && (
             <li className="px-4 py-2 text-sm text-stone-400">No notes yet</li>
           )}
         </ul>
-        <div className="border-t border-stone-200 p-3">
+        <div className="border-t border-stone-200 p-4 flex">
           <button
             onClick={() => void signOut()}
-            className="text-xs text-stone-500 hover:text-stone-800"
+            className="text-xs text-stone-500 hover:text-stone-800 mb-1"
           >
             Sign out
           </button>
@@ -161,10 +186,7 @@ function Workspace() {
       </aside>
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          <Route
-            index
-            element={<HomeRedirect firstId={notes[0]?._id ?? null} />}
-          />
+          <Route index element={<HomeRedirect firstId={notes[0]?._id ?? null} />} />
           <Route
             path="notes/:id"
             element={
@@ -189,10 +211,84 @@ function Workspace() {
   )
 }
 
-function EmptyState({ children }: { children: React.ReactNode }) {
+type NoteRow = { _id: Id<"notes">; title: string; parentId: Id<"notes"> | string | null }
+
+function NoteTree({
+  parentId,
+  depth,
+  childrenByParent,
+  collapsed,
+  onToggle,
+  onAddChild,
+}: {
+  parentId: string | null
+  depth: number
+  childrenByParent: Map<string | null, NoteRow[]>
+  collapsed: Set<string>
+  onToggle: (id: string) => void
+  onAddChild: (parentId: Id<"notes">) => void
+}) {
+  const rows = childrenByParent.get(parentId) ?? []
   return (
-    <div className="h-full flex items-center justify-center text-stone-400">{children}</div>
+    <>
+      {rows.map((n) => {
+        const idStr = n._id as unknown as string
+        const kids = childrenByParent.get(idStr) ?? []
+        const hasKids = kids.length > 0
+        const isCollapsed = collapsed.has(idStr)
+        return (
+          <li key={idStr}>
+            <div
+              className="group flex items-center hover:bg-stone-100"
+              style={{ paddingLeft: `${depth * 12}px` }}
+            >
+              <button
+                onClick={() => onToggle(idStr)}
+                className={`w-5 shrink-0 flex justify-center text-stone-400 ${hasKids ? "" : "invisible"}`}
+                aria-label={isCollapsed ? "Expand" : "Collapse"}
+              >
+                {isCollapsed ? (
+                  <CaretRight size={12} weight="bold" />
+                ) : (
+                  <CaretDown size={12} weight="bold" />
+                )}
+              </button>
+              <NavLink
+                to={`/notes/${n._id}`}
+                className={({ isActive }) =>
+                  `flex-1 min-w-0 truncate py-2 pr-1 text-sm ${isActive ? "font-medium" : ""}`
+                }
+              >
+                {n.title || "Untitled"}
+              </NavLink>
+              <button
+                onClick={() => onAddChild(n._id)}
+                className="px-2 text-stone-400 opacity-0 group-hover:opacity-100 hover:text-stone-700"
+                title="Add sub-note"
+                aria-label="Add sub-note"
+              >
+                <Plus size={14} weight="bold" />
+              </button>
+            </div>
+            {hasKids && !isCollapsed && (
+              <NoteTree
+                parentId={idStr}
+                depth={depth + 1}
+                childrenByParent={childrenByParent}
+                collapsed={collapsed}
+                onToggle={onToggle}
+                onAddChild={onAddChild}
+              />
+            )}
+          </li>
+        )
+      })}
+    </>
   )
+}
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return <div className="h-full flex items-center justify-center text-stone-400">{children}</div>
 }
 
 function HomeRedirect({ firstId }: { firstId: Id<"notes"> | null }) {

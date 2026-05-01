@@ -6,7 +6,6 @@ import StarterKit from "@tiptap/starter-kit"
 import Image from "@tiptap/extension-image"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
-import Underline from "@tiptap/extension-underline"
 import { Markdown } from "tiptap-markdown"
 import { useEffect, useMemo, useRef, useState } from "react"
 
@@ -56,7 +55,6 @@ export function Editor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
-      Underline,
       Image.configure({ inline: false, allowBase64: false }),
       Link.extend({
         addInputRules() {
@@ -217,10 +215,9 @@ function Toolbar({
     editor
       .chain()
       .focus()
-      .insertContentAt(
-        { from, to },
-        [{ type: "text", text, marks: [{ type: "link", attrs: { href: wikiHref(t) } }] }],
-      )
+      .insertContentAt({ from, to }, [
+        { type: "text", text, marks: [{ type: "link", attrs: { href: wikiHref(t) } }] },
+      ])
       .run()
     setLinkOpen(false)
   }
@@ -375,9 +372,7 @@ function TBtn({
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`min-w-8 h-8 px-2 rounded-md text-sm flex items-center justify-center transition ${
-        active
-          ? "bg-stone-900 text-white"
-          : "text-stone-700 hover:bg-stone-200"
+        active ? "bg-stone-900 text-white" : "text-stone-700 hover:bg-stone-200"
       }`}
     >
       {children}

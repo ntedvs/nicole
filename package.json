@@ -1,7 +1,6 @@
 {
   "name": "nicole",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "convex dev --start 'vite --open'",
@@ -13,11 +12,12 @@
   },
   "dependencies": {
     "@convex-dev/auth": "0.0.92",
+    "@phosphor-icons/react": "^2.1.10",
+    "@pierre/trees": "^1.0.0-beta.3",
     "@tailwindcss/typography": "0.5.19",
     "@tiptap/extension-image": "3.22.5",
     "@tiptap/extension-link": "3.22.5",
     "@tiptap/extension-placeholder": "3.22.5",
-    "@tiptap/extension-underline": "3.22.5",
     "@tiptap/pm": "3.22.5",
     "@tiptap/react": "3.22.5",
     "@tiptap/starter-kit": "3.22.5",

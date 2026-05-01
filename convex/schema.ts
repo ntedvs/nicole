@@ -9,7 +9,9 @@ export default defineSchema({
     title: v.string(),
     content: v.string(),
     titleLower: v.string(),
+    parentId: v.optional(v.id("notes")),
   })
     .index("by_owner", ["owner"])
-    .index("by_owner_title", ["owner", "titleLower"]),
+    .index("by_owner_title", ["owner", "titleLower"])
+    .index("by_owner_parent", ["owner", "parentId"]),
 })

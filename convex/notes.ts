@@ -19,7 +19,12 @@ export const list = query({
       .withIndex("by_owner", (q) => q.eq("owner", userId))
       .order("desc")
       .take(500)
-    return notes.map((n) => ({ _id: n._id, title: n.title, _creationTime: n._creationTime }))
+    return notes.map((n) => ({
+      _id: n._id,
+      title: n.title,
+      _creationTime: n._creationTime,
+      parentId: n.parentId ?? null,
+    }))
   },
 })
 
@@ -49,17 +54,46 @@ export const getByTitle = query({
 })
 
 export const create = mutation({
-  args: { title: v.string() },
+  args: { title: v.string(), parentId: v.optional(v.id("notes")) },
   handler: async (ctx, args) => {
     const userId = await requireUser(ctx)
     const title = args.title.trim() || "Untitled"
     const titleLower = title.toLowerCase()
-    const existing = await ctx.db
-      .query("notes")
-      .withIndex("by_owner_title", (q) => q.eq("owner", userId).eq("titleLower", titleLower))
-      .unique()
-    if (existing) return existing._id
-    return await ctx.db.insert("notes", { owner: userId, title, titleLower, content: "" })
+    if (args.parentId) {
+      const parent = await ctx.db.get(args.parentId)
+      if (!parent || parent.owner !== userId) throw new Error("Parent not found")
+    }
+    return await ctx.db.insert("notes", {
+      owner: userId,
+      title,
+      titleLower,
+      content: "",
+      parentId: args.parentId,
+    })
+  },
+})
+
+export const setParent = mutation({
+  args: { id: v.id("notes"), parentId: v.union(v.id("notes"), v.null()) },
+  handler: async (ctx, args) => {
+    const userId = await requireUser(ctx)
+    const note = await ctx.db.get(args.id)
+    if (!note || note.owner !== userId) throw new Error("Not found")
+    if (args.parentId) {
+      if (args.parentId === args.id) throw new Error("Cannot parent to self")
+      const parent = await ctx.db.get(args.parentId)
+      if (!parent || parent.owner !== userId) throw new Error("Parent not found")
+      // Prevent cycles: walk up from parent.
+      let cursor: Id<"notes"> | undefined = parent.parentId
+      while (cursor) {
+        if (cursor === args.id) throw new Error("Cycle")
+        const next = await ctx.db.get(cursor)
+        cursor = next?.parentId
+      }
+      await ctx.db.patch(args.id, { parentId: args.parentId })
+    } else {
+      await ctx.db.patch(args.id, { parentId: undefined })
+    }
   },
 })
 
@@ -118,7 +152,16 @@ export const remove = mutation({
     const userId = await requireUser(ctx)
     const note = await ctx.db.get(args.id)
     if (!note || note.owner !== userId) throw new Error("Not found")
-    await ctx.db.delete(args.id)
+    const queue: Id<"notes">[] = [args.id]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      const children = await ctx.db
+        .query("notes")
+        .withIndex("by_owner_parent", (q) => q.eq("owner", userId).eq("parentId", current))
+        .collect()
+      for (const c of children) queue.push(c._id)
+      await ctx.db.delete(current)
+    }
   },
 })
 
