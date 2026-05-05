@@ -1,11 +1,15 @@
-import type { Oxlintrc } from "oxlint"
+import { defineConfig } from "oxlint"
 
-export default {
-  plugins: ["eslint", "typescript", "unicorn", "oxc"],
-  categories: {
-    correctness: "error",
-    suspicious: "warn",
-    perf: "warn",
-  },
-  ignorePatterns: ["dist", "convex/_generated", "node_modules"],
-} satisfies Oxlintrc
+export default defineConfig({
+  plugins: [
+    "typescript",
+    "unicorn",
+    "react",
+    "react-perf",
+    "oxc",
+    "import",
+    "jsx-a11y",
+    "node",
+    "promise",
+  ],
+})
