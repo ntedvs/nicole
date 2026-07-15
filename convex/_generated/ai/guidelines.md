@@ -1,5 +1,7 @@
 # Convex guidelines
 
+These guidelines target Convex `^1.41.0`.
+
 ## Function guidelines
 
 ### Http endpoint syntax
@@ -7,17 +9,17 @@
 - HTTP endpoints are defined in `convex/http.ts` and require an `httpAction` decorator. For example:
 
 ```typescript
-import { httpRouter } from "convex/server"
-import { httpAction } from "./_generated/server"
-const http = httpRouter()
+import { httpRouter } from "convex/server";
+import { httpAction } from "./_generated/server";
+const http = httpRouter();
 http.route({
   path: "/echo",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    const body = await req.bytes()
-    return new Response(body, { status: 200 })
+    const body = await req.bytes();
+    return new Response(body, { status: 200 });
   }),
-})
+});
 ```
 
 - HTTP endpoints are always registered at the exact path you specify in the `path` field. For example, if you specify `/api/someRoute`, the endpoint will be registered at `/api/someRoute`.
@@ -27,8 +29,8 @@ http.route({
 - Below is an example of an array validator:
 
 ```typescript
-import { mutation } from "./_generated/server"
-import { v } from "convex/values"
+import { mutation } from "./_generated/server";
+import { v } from "convex/values";
 
 export default mutation({
   args: {
@@ -37,14 +39,14 @@ export default mutation({
   handler: async (ctx, args) => {
     //...
   },
-})
+});
 ```
 
 - Below is an example of a schema with validators that codify a discriminated union type:
 
 ```typescript
-import { defineSchema, defineTable } from "convex/server"
-import { v } from "convex/values"
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
 
 export default defineSchema({
   results: defineTable(
@@ -59,7 +61,7 @@ export default defineSchema({
       }),
     ),
   ),
-})
+});
 ```
 
 - Here are the valid Convex types along with their respective validators:
@@ -91,6 +93,21 @@ export default defineSchema({
 - ONLY call an action from another action if you need to cross runtimes (e.g. from V8 to Node). Otherwise, pull out the shared code into a helper async function and call that directly instead.
 - Try to use as few calls from actions to queries and mutations as possible. Queries and mutations are transactions, so splitting logic up into multiple calls introduces the risk of race conditions.
 - All of these calls take in a `FunctionReference`. Do NOT try to pass the callee function directly into one of these calls.
+- Nested `ctx.runQuery` and `ctx.runMutation` calls from a mutation execute as subtransactions. If a nested call throws, its writes roll back independently, so the caller can catch the error and continue with its own writes intact.
+- In Convex 1.41+, `ctx.runQuery` and `ctx.runMutation` accept an optional third argument with `transactionLimits`. These limits cap how much the nested call may additionally consume on top of what the caller has already used - they can only tighten the global transaction limits, never raise them. If the nested call exceeds its cap and rolls back, the caller keeps its own remaining budget, which is useful for preserving caller headroom. For example:
+
+```ts
+try {
+  await ctx.runMutation(internal.example.writeBatch, args, {
+    transactionLimits: { documentsWritten: 100, bytesWritten: 1024 * 1024 },
+  });
+} catch (e) {
+  // The nested mutation's writes rolled back; this mutation can still write.
+}
+```
+
+The supported `transactionLimits` fields are `bytesRead`, `bytesWritten`, `databaseQueries`, `documentsRead`, `documentsWritten`, `functionsScheduled`, and `scheduledFunctionArgsBytes`.
+
 - When using `ctx.runQuery`, `ctx.runMutation`, or `ctx.runAction` to call a function in the same file, specify a type annotation on the return value to work around TypeScript circularity limitations. For example,
 
 ```
@@ -123,9 +140,9 @@ export const g = query({
 - Define pagination using the following syntax:
 
 ```ts
-import { v } from "convex/values"
-import { query, mutation } from "./_generated/server"
-import { paginationOptsValidator } from "convex/server"
+import { v } from "convex/values";
+import { query, mutation } from "./_generated/server";
+import { paginationOptsValidator } from "convex/server";
 export const listWithExtraArg = query({
   args: { paginationOpts: paginationOptsValidator, author: v.string() },
   handler: async (ctx, args) => {
@@ -133,19 +150,30 @@ export const listWithExtraArg = query({
       .query("messages")
       .withIndex("by_author", (q) => q.eq("author", args.author))
       .order("desc")
-      .paginate(args.paginationOpts)
+      .paginate(args.paginationOpts);
   },
-})
+});
 ```
 
 Note: `paginationOpts` is an object with the following properties:
 
-- `numItems`: the maximum number of documents to return (the validator is `v.number()`)
-- `cursor`: the cursor to use to fetch the next page of documents (the validator is `v.union(v.string(), v.null())`)
-- A query that ends in `.paginate()` returns an object that has the following properties:
-- page (contains an array of documents that you fetches)
-- isDone (a boolean that represents whether or not this is the last page of documents)
-- continueCursor (a string that represents the cursor to use to fetch the next page of documents)
+- `numItems`: the initial page-size target — not a guaranteed maximum under reactive pagination (the validator is `v.number()`)
+- `cursor`: the cursor to use to fetch the next page of documents; required (the validator is `v.union(v.string(), v.null())`)
+- `endCursor` (optional): bounds the page to end at a known cursor
+- `maximumRowsRead` (optional): limits how many rows the query may scan before returning a partial page
+- `maximumBytesRead` (optional): limits how many bytes the query may read before returning a partial page
+- `id` (optional): client-managed pagination metadata accepted by `paginationOptsValidator`
+
+Always validate pagination arguments with `paginationOptsValidator` and pass `args.paginationOpts` unchanged to `.paginate()` — do not reconstruct it field by field, or the optional fields lose their native behavior.
+
+A query that ends in `.paginate()` returns an object that has the following properties:
+
+- `page`: an array of the documents fetched for this page
+- `isDone`: a boolean representing whether this is the last page of documents
+- `continueCursor`: a string cursor to fetch the next page of documents
+- `splitCursor` (optional, string or null) and `pageStatus` (optional, `"SplitRecommended"`, `"SplitRequired"`, or null): present when the page was cut short and should be split
+
+For the return validator of a paginated query, use `paginationResultValidator(itemValidator)` from `convex/server` rather than reproducing this shape by hand.
 
 ## Schema guidelines
 
@@ -170,7 +198,7 @@ export default {
       applicationID: "convex",
     },
   ],
-}
+};
 ```
 
 The `domain` must be the issuer URL of the JWT provider. Convex fetches `{domain}/.well-known/openid-configuration` to discover the JWKS endpoint. The `applicationID` is checked against the JWT `aud` (audience) claim.
@@ -181,16 +209,16 @@ The `domain` must be the issuer URL of the JWT provider. Convex fetches `{domain
 - When using an external auth provider with Convex on the client, use `ConvexProviderWithAuth` instead of `ConvexProvider`:
 
 ```tsx
-import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react"
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!)
+const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 function App({ children }: { children: React.ReactNode }) {
   return (
     <ConvexProviderWithAuth client={convex} useAuth={useYourAuthHook}>
       {children}
     </ConvexProviderWithAuth>
-  )
+  );
 }
 ```
 
@@ -204,26 +232,27 @@ The `useAuth` prop must return `{ isLoading, isAuthenticated, fetchAccessToken }
 - If you need to define a `Record` make sure that you correctly provide the type of the key and value in the type. For example a validator `v.record(v.id('users'), v.string())` would have the type `Record<Id<'users'>, string>`. Below is an example of using `Record` with an `Id` type in a query:
 
 ```ts
-import { query } from "./_generated/server"
-import { Doc, Id } from "./_generated/dataModel"
+import { query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 
 export const exampleQuery = query({
   args: { userIds: v.array(v.id("users")) },
   handler: async (ctx, args) => {
-    const idToUsername: Record<Id<"users">, string> = {}
+    const idToUsername: Record<Id<"users">, string> = {};
     for (const userId of args.userIds) {
-      const user = await ctx.db.get("users", userId)
+      const user = await ctx.db.get("users", userId);
       if (user) {
-        idToUsername[user._id] = user.username
+        idToUsername[user._id] = user.username;
       }
     }
 
-    return idToUsername
+    return idToUsername;
   },
-})
+});
 ```
 
 - Be strict with types, particularly around id's of documents. For example, if a function takes in an id for a document in the 'users' table, take in `Id<'users'>` rather than `string`.
+- For typed app environment variables, declare them in `convex/convex.config.ts` with `defineApp({ env: { MY_KEY: v.optional(v.string()) } })` and read them with `env` from `./_generated/server` instead of `process.env`.
 
 ## Full text search guidelines
 
@@ -238,24 +267,25 @@ q.search("body", "hello hi").eq("channel", "#general"),
 
 ## Query guidelines
 
-- Do NOT use `filter` in queries. Instead, define an index in the schema and use `withIndex` instead.
+- Prefer `.withIndex()` and express every predicate supported by the index in its index range. A subsequent `.filter()` is acceptable for additional predicates that cannot be expressed by that index. Filtering happens after the index scan and does not reduce rows read, so it does not make an otherwise unbounded query scalable.
 - If the user does not explicitly tell you to return all results from a query you should ALWAYS return a bounded collection instead. So that is instead of using `.collect()` you should use `.take()` or paginate on database queries. This prevents future performance issues when tables grow in an unbounded way.
 - Never use `.collect().length` to count rows. Convex has no built-in count operator, so if you need a count that stays efficient at scale, maintain a denormalized counter in a separate document and update it in your mutations.
-- Convex queries do NOT support `.delete()`. If you need to delete all documents matching a query, use `.take(n)` to read them in batches, iterate over each batch calling `ctx.db.delete(row._id)`, and repeat until no more results are returned.
+- Convex queries do NOT support `.delete()`. If you need to delete all documents matching a query, use `.take(n)` to read them in batches, iterate over each batch calling `ctx.db.delete("tasks", row._id)`, and repeat until no more results are returned.
 - Convex mutations are transactions with limits on the number of documents read and written. If a mutation needs to process more documents than fit in a single transaction (e.g. bulk deletion on a large table), process a batch with `.take(n)` and then call `ctx.scheduler.runAfter(0, api.myModule.myMutation, args)` to schedule itself to continue. This way each invocation stays within transaction limits.
 - Use `.unique()` to get a single document from a query. This method will throw an error if there are multiple documents that match the query.
 - When using async iteration, don't use `.collect()` or `.take(n)` on the result of a query. Instead, use the `for await (const row of query)` syntax.
 
 ### Ordering
 
-- By default Convex always returns documents in ascending `_creationTime` order.
+- Queries default to ascending order over the selected index key. A plain table scan uses the built-in `by_creation_time` index, so it returns documents in ascending `_creationTime` order; a query using a custom index defaults to ascending order across that index's entire key.
 - You can use `.order('asc')` or `.order('desc')` to pick whether a query is in ascending or descending order. If the order isn't specified, it defaults to ascending.
 - Document queries that use indexes will be ordered based on the columns in the index and can avoid slow table scans.
+- Convex appends `_creationTime` as the final column of every database index. An index on `["points"]` therefore orders by `points`, then `_creationTime`. `.order("desc")` reverses the entire index key, so rows with equal `points` come back newest first. Rely on this built-in tiebreak instead of re-sorting results in JavaScript.
 
 ## Mutation guidelines
 
-- Use `ctx.db.replace` to fully replace an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.replace('tasks', taskId, { name: 'Buy milk', completed: false })`
-- Use `ctx.db.patch` to shallow merge updates into an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.patch('tasks', taskId, { completed: true })`
+- Use `ctx.db.replace` to fully replace an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.replace("tasks", taskId, { name: "Buy milk", completed: false })`
+- Use `ctx.db.patch` to shallow merge updates into an existing document. This method will throw an error if the document does not exist. Syntax: `await ctx.db.patch("tasks", taskId, { completed: true })`
 
 ## Action guidelines
 
@@ -266,15 +296,15 @@ q.search("body", "hello hi").eq("channel", "#general"),
 - Below is an example of the syntax for an action:
 
 ```ts
-import { action } from "./_generated/server"
+import { action } from "./_generated/server";
 
 export const exampleAction = action({
   args: {},
   handler: async (ctx, args) => {
-    console.log("This action does not return anything")
-    return null
+    console.log("This action does not return anything");
+    return null;
   },
-})
+});
 ```
 
 ## Scheduling guidelines
@@ -286,23 +316,23 @@ export const exampleAction = action({
 - Define crons by declaring the top-level `crons` object, calling some methods on it, and then exporting it as default. For example,
 
 ```ts
-import { cronJobs } from "convex/server"
-import { internal } from "./_generated/api"
-import { internalAction } from "./_generated/server"
+import { cronJobs } from "convex/server";
+import { internal } from "./_generated/api";
+import { internalAction } from "./_generated/server";
 
 const empty = internalAction({
   args: {},
   handler: async (ctx, args) => {
-    console.log("empty")
+    console.log("empty");
   },
-})
+});
 
-const crons = cronJobs()
+const crons = cronJobs();
 
 // Run `internal.crons.empty` every two hours.
-crons.interval("delete inactive users", { hours: 2 }, internal.crons.empty, {})
+crons.interval("delete inactive users", { hours: 2 }, internal.crons.empty, {});
 
-export default crons
+export default crons;
 ```
 
 - You can register Convex functions within `crons.ts` just like any other file.
@@ -316,22 +346,25 @@ Test files go inside the `convex/` directory. You must pass a module map from `i
 
 ```typescript
 /// <reference types="vite/client" />
-import { convexTest } from "convex-test"
-import { expect, test } from "vitest"
-import { api } from "./_generated/api"
-import schema from "./schema"
+import { convexTest } from "convex-test";
+import { expect, test } from "vitest";
+import { api } from "./_generated/api";
+import schema from "./schema";
 
-const modules = import.meta.glob("./**/*.ts")
+const modules = import.meta.glob("./**/*.ts");
 
 test("some behavior", async () => {
-  const t = convexTest(schema, modules)
-  await t.mutation(api.messages.send, { body: "Hi!", author: "Sarah" })
-  const messages = await t.query(api.messages.list)
-  expect(messages).toMatchObject([{ body: "Hi!", author: "Sarah" }])
-})
+  const t = convexTest(schema, modules);
+  await t.mutation(api.messages.send, { body: "Hi!", author: "Sarah" });
+  const messages = await t.query(api.messages.list);
+  expect(messages).toMatchObject([{ body: "Hi!", author: "Sarah" }]);
+});
 ```
 
 The `modules` argument is required so convex-test can discover and load function files. The `/// <reference types="vite/client" />` directive is needed for TypeScript to recognize `import.meta.glob`.
+
+- Only add the `/// <reference types="vite/client" />` directive at the top of test files that call `import.meta.glob`; do NOT add it to non-test files.
+- Do NOT add a `compilerOptions.types` allowlist to `tsconfig.json` for type packages you have not installed (e.g. `"node"` without `@types/node`, or `"vite/client"` without vite). Any unresolved entry in `types` fails typechecking with TS2688. Leave `types` unset unless a package genuinely requires it and is installed.
 
 ## File storage guidelines
 

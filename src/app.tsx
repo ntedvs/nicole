@@ -46,8 +46,7 @@ function Workspace() {
   const [search, setSearch] = useState("")
 
   const filtered = useMemo(
-    () =>
-      notes.filter((n) => n.title.toLowerCase().includes(search.toLowerCase())),
+    () => notes.filter((n) => n.title.toLowerCase().includes(search.toLowerCase())),
     [notes, search],
   )
 
@@ -56,10 +55,7 @@ function Workspace() {
     const ids = new Set(filtered.map((n) => n._id))
     for (const n of filtered) {
       // If parent is filtered out by search, hoist to root so result is visible.
-      const key =
-        n.parentId && ids.has(n.parentId as unknown as Id<"notes">)
-          ? n.parentId
-          : null
+      const key = n.parentId && ids.has(n.parentId as unknown as Id<"notes">) ? n.parentId : null
       const arr = map.get(key as string | null) ?? []
       arr.push(n)
       map.set(key as string | null, arr)
@@ -155,10 +151,7 @@ function Workspace() {
       </aside>
       <main className="flex-1 overflow-y-auto">
         <Routes>
-          <Route
-            index
-            element={<HomeRedirect firstId={notes[0]?._id ?? null} />}
-          />
+          <Route index element={<HomeRedirect firstId={notes[0]?._id ?? null} />} />
           <Route
             path="notes/:id"
             element={

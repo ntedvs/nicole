@@ -3,12 +3,14 @@
 import Image from "@tiptap/extension-image"
 import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
+import { TableCell, TableHeader, TableKit } from "@tiptap/extension-table"
 import { NodeSelection } from "@tiptap/pm/state"
 import { EditorView, NodeView } from "@tiptap/pm/view"
 import { EditorContent, Editor as TiptapEditor, useEditor } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Markdown } from "tiptap-markdown"
+import { InsertTableButton, TableControls } from "./table-toolbar"
 
 const WIKI_PREFIX = "#wiki/"
 const IMAGE_SIZE_TITLE = /^=(\d+)x(\d+)$/
@@ -24,10 +26,13 @@ const IMAGE_RESIZE_DIRECTIONS = [
 ] as const
 
 const wikiHref = (title: string) =>
-  `${WIKI_PREFIX}${encodeURIComponent(title.trim())}`
+  `${WIKI_PREFIX}${encodeURIComponent(title.trim()).replace(
+    /[()]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  )}`
 const isWikiHref = (href: string) => href.startsWith(WIKI_PREFIX)
 const wikiTitle = (href: string) =>
-  decodeURIComponent(href.slice(WIKI_PREFIX.length))
+  decodeURIComponent(href.slice(WIKI_PREFIX.length).replace(/\\([()])/g, "$1"))
 
 function preprocessMarkdown(md: string): string {
   return md.replace(/\[\[([^[\]\n]+?)\]\]/g, (_m, body: string) => {
@@ -40,7 +45,7 @@ function preprocessMarkdown(md: string): string {
 
 function postprocessMarkdown(md: string): string {
   return md.replace(
-    /\[([^\]]+)\]\((#wiki\/[^)]+)\)/g,
+    /\[([^\]]+)\]\((#wiki\/(?:\\.|[^)])+)\)/g,
     (_m, label: string, href: string) => {
       const title = wikiTitle(href)
       return label === title ? `[[${title}]]` : `[[${title}|${label}]]`
@@ -90,9 +95,16 @@ const ResizableImage = Image.extend({
     }
   },
   addNodeView() {
-    return ({ node, getPos, editor }) =>
-      new ResizableImageView(node, getPos, editor.view)
+    return ({ node, getPos, editor }) => new ResizableImageView(node, getPos, editor.view)
   },
+})
+
+const MarkdownTableCell = TableCell.extend({
+  content: "paragraph",
+})
+
+const MarkdownTableHeader = TableHeader.extend({
+  content: "paragraph",
 })
 
 export function Editor({
@@ -122,6 +134,16 @@ export function Editor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: false }),
+      TableKit.configure({
+        table: {
+          resizable: false,
+          renderWrapper: true,
+        },
+        tableCell: false,
+        tableHeader: false,
+      }),
+      MarkdownTableCell,
+      MarkdownTableHeader,
       ResizableImage.configure({ inline: false, allowBase64: false }),
       Link.extend({ inclusive: false }).configure({
         openOnClick: false,
@@ -140,7 +162,7 @@ export function Editor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-stone max-w-none focus:outline-none min-h-[60vh] prose-img:rounded-lg prose-headings:font-serif",
+          "prose prose-stone max-w-none focus:outline-none min-h-[60vh] prose-img:rounded-lg prose-headings:font-serif prose-th:bg-transparent prose-th:text-left prose-th:font-normal",
       },
       handleClickOn: (_view, _pos, _node, _nodePos, event) => {
         const target = event.target as HTMLElement
@@ -174,6 +196,10 @@ export function Editor({
         void insertImages(view, files, uploadRef.current, event)
         return true
       },
+      handleKeyDown: (view, event) => {
+        if (event.key !== "Enter") return false
+        return selectionIsInTableCell(view.state.selection.$from)
+      },
     },
     onUpdate: ({ editor: ed }) => {
       const md = (
@@ -198,10 +224,7 @@ export function Editor({
 
   const wikiColor = linkColor ? `#${linkColor}` : "rgb(120 53 15)"
   return (
-    <div
-      className="wiki-editor"
-      style={{ ["--wiki-link-color" as string]: wikiColor }}
-    >
+    <div className="wiki-editor" style={{ ["--wiki-link-color" as string]: wikiColor }}>
       <style>{`
         .wiki-editor a[href^="${WIKI_PREFIX}"] {
           color: var(--wiki-link-color);
@@ -359,138 +382,128 @@ function Toolbar({
   }
 
   return (
-    <div className="sticky top-0 z-10 -mx-1 mb-4 flex flex-wrap items-center gap-1 border-b border-stone-200 bg-stone-50/90 px-1 py-2 backdrop-blur">
-      <Group>
-        <TBtn
-          label="Heading 1"
-          active={editor.isActive("heading", { level: 1 })}
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-        >
-          <span className="font-serif text-base font-semibold">H1</span>
-        </TBtn>
-        <TBtn
-          label="Heading 2"
-          active={editor.isActive("heading", { level: 2 })}
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-        >
-          <span className="font-serif text-base font-semibold">H2</span>
-        </TBtn>
-        <TBtn
-          label="Heading 3"
-          active={editor.isActive("heading", { level: 3 })}
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
-          }
-        >
-          <span className="font-serif text-base font-semibold">H3</span>
-        </TBtn>
-      </Group>
-      <Divider />
-      <Group>
-        <TBtn
-          label="Bold"
-          active={editor.isActive("bold")}
-          onClick={() => editor.chain().focus().toggleBold().run()}
-        >
-          <b>B</b>
-        </TBtn>
-        <TBtn
-          label="Italic"
-          active={editor.isActive("italic")}
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-        >
-          <i>I</i>
-        </TBtn>
-        <TBtn
-          label="Underline"
-          active={editor.isActive("underline")}
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-        >
-          <u>U</u>
-        </TBtn>
-        <TBtn
-          label="Strikethrough"
-          active={editor.isActive("strike")}
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-        >
-          <s>S</s>
-        </TBtn>
-      </Group>
-      <Divider />
-      <Group>
-        <TBtn
-          label="Bulleted list"
-          active={editor.isActive("bulletList")}
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-        >
-          •
-        </TBtn>
-        <TBtn
-          label="Numbered list"
-          active={editor.isActive("orderedList")}
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        >
-          1.
-        </TBtn>
-        <TBtn
-          label="Quote"
-          active={editor.isActive("blockquote")}
-          onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        >
-          ❝
-        </TBtn>
-      </Group>
-      <Divider />
-      <Group>
-        <TBtn label="Insert image" onClick={() => fileRef.current?.click()}>
-          🖼
-        </TBtn>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0]
-            e.target.value = ""
-            if (!file) return
-            try {
-              const url = await uploadImage(file)
-              editor
-                .chain()
-                .focus()
-                .setImage({ src: url, alt: file.name })
-                .run()
-            } catch (err) {
-              console.error(err)
-            }
-          }}
-        />
-        <div className="relative">
+    <div className="sticky top-0 z-10 -mx-1 mb-4 border-b border-stone-200 bg-stone-50/90 px-1 py-2 backdrop-blur">
+      <div className="flex flex-wrap items-center gap-1">
+        <Group>
           <TBtn
-            label="Link to note"
-            active={linkOpen}
-            onClick={() => setLinkOpen((v) => !v)}
+            label="Heading 1"
+            active={editor.isActive("heading", { level: 1 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
           >
-            🔗
+            <span className="font-serif text-base font-semibold">H1</span>
           </TBtn>
-          {linkOpen && (
-            <NotePicker
-              options={noteOptions}
-              onClose={() => setLinkOpen(false)}
-              onPick={insertWikiLink}
-              onCreate={async (title) => {
-                await onCreateNote(title)
-                insertWikiLink(title)
-              }}
-            />
-          )}
-        </div>
-      </Group>
+          <TBtn
+            label="Heading 2"
+            active={editor.isActive("heading", { level: 2 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          >
+            <span className="font-serif text-base font-semibold">H2</span>
+          </TBtn>
+          <TBtn
+            label="Heading 3"
+            active={editor.isActive("heading", { level: 3 })}
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          >
+            <span className="font-serif text-base font-semibold">H3</span>
+          </TBtn>
+        </Group>
+        <Divider />
+        <Group>
+          <TBtn
+            label="Bold"
+            active={editor.isActive("bold")}
+            onClick={() => editor.chain().focus().toggleBold().run()}
+          >
+            <b>B</b>
+          </TBtn>
+          <TBtn
+            label="Italic"
+            active={editor.isActive("italic")}
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+          >
+            <i>I</i>
+          </TBtn>
+          <TBtn
+            label="Underline"
+            active={editor.isActive("underline")}
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+          >
+            <u>U</u>
+          </TBtn>
+          <TBtn
+            label="Strikethrough"
+            active={editor.isActive("strike")}
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+          >
+            <s>S</s>
+          </TBtn>
+        </Group>
+        <Divider />
+        <Group>
+          <TBtn
+            label="Bulleted list"
+            active={editor.isActive("bulletList")}
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+          >
+            •
+          </TBtn>
+          <TBtn
+            label="Numbered list"
+            active={editor.isActive("orderedList")}
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+          >
+            1.
+          </TBtn>
+          <TBtn
+            label="Quote"
+            active={editor.isActive("blockquote")}
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+          >
+            ❝
+          </TBtn>
+        </Group>
+        <Divider />
+        <Group>
+          <TBtn label="Insert image" onClick={() => fileRef.current?.click()}>
+            🖼
+          </TBtn>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ""
+              if (!file) return
+              try {
+                const url = await uploadImage(file)
+                editor.chain().focus().setImage({ src: url, alt: file.name }).run()
+              } catch (err) {
+                console.error(err)
+              }
+            }}
+          />
+          <div className="relative">
+            <TBtn label="Link to note" active={linkOpen} onClick={() => setLinkOpen((v) => !v)}>
+              🔗
+            </TBtn>
+            {linkOpen && (
+              <NotePicker
+                options={noteOptions}
+                onClose={() => setLinkOpen(false)}
+                onPick={insertWikiLink}
+                onCreate={async (title) => {
+                  await onCreateNote(title)
+                  insertWikiLink(title)
+                }}
+              />
+            )}
+          </div>
+          <InsertTableButton editor={editor} />
+        </Group>
+      </div>
+      <TableControls editor={editor} />
     </div>
   )
 }
@@ -560,9 +573,7 @@ function NotePicker({
     if (!q) return options.slice(0, 8)
     return options.filter((o) => o.title.toLowerCase().includes(q)).slice(0, 8)
   }, [options, query])
-  const exact = options.some(
-    (o) => o.title.toLowerCase() === query.trim().toLowerCase(),
-  )
+  const exact = options.some((o) => o.title.toLowerCase() === query.trim().toLowerCase())
   const canCreate = query.trim().length > 0 && !exact
 
   return (
@@ -634,8 +645,8 @@ async function insertImages(
       })
 
       const pos = dropEvent
-        ? (view.posAtCoords({ left: dropEvent.clientX, top: dropEvent.clientY })
-            ?.pos ?? view.state.selection.from)
+        ? (view.posAtCoords({ left: dropEvent.clientX, top: dropEvent.clientY })?.pos ??
+          view.state.selection.from)
         : view.state.selection.from
 
       const tr = view.state.tr.insert(pos, node)
@@ -649,9 +660,7 @@ async function insertImages(
 function imageFilesFromClipboard(data: DataTransfer | null): File[] {
   if (!data) return []
 
-  const files = Array.from(data.files).filter((file) =>
-    file.type.startsWith("image/"),
-  )
+  const files = Array.from(data.files).filter((file) => file.type.startsWith("image/"))
   if (files.length > 0) return files
 
   return Array.from(data.items)
@@ -693,9 +702,7 @@ class ResizableImageView implements NodeView {
       const handle = document.createElement("span")
       handle.className = "resizable-image__handle"
       handle.dataset.direction = direction
-      handle.addEventListener("mousedown", (event) =>
-        this.startResize(event, direction),
-      )
+      handle.addEventListener("mousedown", (event) => this.startResize(event, direction))
       this.dom.appendChild(handle)
     }
 
@@ -738,9 +745,7 @@ class ResizableImageView implements NodeView {
   private select() {
     const pos = this.getPos()
     if (pos === undefined) return
-    const tr = this.view.state.tr.setSelection(
-      NodeSelection.create(this.view.state.doc, pos),
-    )
+    const tr = this.view.state.tr.setSelection(NodeSelection.create(this.view.state.doc, pos))
     this.view.dispatch(tr)
   }
 
@@ -845,4 +850,12 @@ function numericAttr(value: string | number | null | undefined): number | null {
   if (typeof value !== "string") return null
   const parsed = Number.parseInt(value, 10)
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function selectionIsInTableCell(position: import("@tiptap/pm/model").ResolvedPos): boolean {
+  for (let depth = position.depth; depth > 0; depth -= 1) {
+    const nodeName = position.node(depth).type.name
+    if (nodeName === "tableCell" || nodeName === "tableHeader") return true
+  }
+  return false
 }

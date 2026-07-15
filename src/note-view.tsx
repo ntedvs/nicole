@@ -8,11 +8,7 @@ import { Id } from "../convex/_generated/dataModel"
 import { Editor } from "./editor"
 
 export function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-full items-center justify-center text-stone-400">
-      {children}
-    </div>
-  )
+  return <div className="flex h-full items-center justify-center text-stone-400">{children}</div>
 }
 
 export function NoteRoute({
@@ -98,10 +94,8 @@ function NoteView({
     return publicUrl
   }
 
-  if (note === undefined)
-    return <div className="p-8 text-stone-400">Loading…</div>
-  if (note === null)
-    return <div className="p-8 text-stone-400">Note not found</div>
+  if (note === undefined) return <div className="p-8 text-stone-400">Loading…</div>
+  if (note === null) return <div className="p-8 text-stone-400">Note not found</div>
 
   return (
     <article className="mx-auto max-w-3xl px-10 py-12">

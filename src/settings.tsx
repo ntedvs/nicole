@@ -63,8 +63,7 @@ export function SettingsPage() {
         </p>
         <h1 className="font-serif text-5xl text-stone-900">Link color</h1>
         <p className="mt-3 max-w-lg font-serif text-lg text-stone-500 italic">
-          The color used when notes link to other notes. Choose something that
-          feels like yours.
+          The color used when notes link to other notes. Choose something that feels like yours.
         </p>
 
         <div className="mt-12 grid grid-cols-[auto_1fr] gap-10">
@@ -169,11 +168,7 @@ export function SettingsPage() {
           >
             Save color
           </button>
-          {savedFlash && (
-            <span className="font-serif text-sm text-stone-500 italic">
-              Saved.
-            </span>
-          )}
+          {savedFlash && <span className="font-serif text-sm text-stone-500 italic">Saved.</span>}
           {error && <span className="text-sm text-red-600">{error}</span>}
         </div>
       </div>

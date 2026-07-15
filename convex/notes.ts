@@ -61,8 +61,7 @@ export const create = mutation({
     const titleLower = title.toLowerCase()
     if (args.parentId) {
       const parent = await ctx.db.get(args.parentId)
-      if (!parent || parent.owner !== userId)
-        throw new Error("Parent not found")
+      if (!parent || parent.owner !== userId) throw new Error("Parent not found")
     }
     return await ctx.db.insert("notes", {
       owner: userId,
@@ -83,8 +82,7 @@ export const setParent = mutation({
     if (args.parentId) {
       if (args.parentId === args.id) throw new Error("Cannot parent to self")
       const parent = await ctx.db.get(args.parentId)
-      if (!parent || parent.owner !== userId)
-        throw new Error("Parent not found")
+      if (!parent || parent.owner !== userId) throw new Error("Parent not found")
       // Prevent cycles: walk up from parent.
       let cursor: Id<"notes"> | undefined = parent.parentId
       while (cursor) {
@@ -126,10 +124,7 @@ export const update = mutation({
 
     // Rewrite [[OldTitle]] → [[NewTitle]] across this user's notes.
     if (oldTitle && newTitle) {
-      const pattern = new RegExp(
-        `\\[\\[\\s*${escapeRegex(oldTitle)}\\s*(\\|[^\\]]*)?\\]\\]`,
-        "gi",
-      )
+      const pattern = new RegExp(`\\[\\[\\s*${escapeRegex(oldTitle)}\\s*(\\|[^\\]]*)?\\]\\]`, "gi")
       const all = await ctx.db
         .query("notes")
         .withIndex("by_owner", (q) => q.eq("owner", userId))
@@ -143,8 +138,7 @@ export const update = mutation({
         const updated = n.content.replace(pattern, (_m, suffix?: string) =>
           suffix ? `[[${newTitle}${suffix}]]` : `[[${newTitle}]]`,
         )
-        if (updated !== n.content)
-          await ctx.db.patch(n._id, { content: updated })
+        if (updated !== n.content) await ctx.db.patch(n._id, { content: updated })
       }
     }
   },
@@ -165,9 +159,7 @@ export const remove = mutation({
       const current = queue.shift()!
       const children = await ctx.db
         .query("notes")
-        .withIndex("by_owner_parent", (q) =>
-          q.eq("owner", userId).eq("parentId", current),
-        )
+        .withIndex("by_owner_parent", (q) => q.eq("owner", userId).eq("parentId", current))
         .collect()
       for (const c of children) queue.push(c._id)
       await ctx.db.delete(current)

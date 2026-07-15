@@ -28,3 +28,41 @@ body {
     @apply cursor-not-allowed;
   }
 }
+
+@layer components {
+  .wiki-editor .tableWrapper {
+    @apply my-6 overflow-x-auto;
+  }
+
+  .wiki-editor table {
+    @apply w-full table-fixed border-collapse;
+  }
+
+  .wiki-editor th,
+  .wiki-editor td {
+    @apply relative min-w-24 border border-stone-300 px-3 py-2 align-top;
+  }
+
+  .wiki-editor th {
+    @apply bg-transparent text-left font-normal;
+  }
+
+  .wiki-editor th > :first-child,
+  .wiki-editor td > :first-child {
+    @apply mt-0;
+  }
+
+  .wiki-editor th > :last-child,
+  .wiki-editor td > :last-child {
+    @apply mb-0;
+  }
+
+  .wiki-editor .selectedCell::after {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    background: rgb(231 229 228 / 65%);
+    content: "";
+    pointer-events: none;
+  }
+}

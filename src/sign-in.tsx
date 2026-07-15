@@ -15,9 +15,7 @@ export function SignInForm() {
           e.preventDefault()
           const formData = new FormData(e.target as HTMLFormElement)
           formData.set("flow", flow)
-          void signIn("password", formData).catch((err) =>
-            setError(err.message),
-          )
+          void signIn("password", formData).catch((err) => setError(err.message))
         }}
       >
         <h1 className="font-serif text-2xl">
@@ -48,9 +46,7 @@ export function SignInForm() {
           className="w-full text-sm text-stone-500 hover:text-stone-800"
           onClick={() => setFlow(flow === "signIn" ? "signUp" : "signIn")}
         >
-          {flow === "signIn"
-            ? "Need an account? Sign up"
-            : "Have an account? Sign in"}
+          {flow === "signIn" ? "Need an account? Sign up" : "Have an account? Sign in"}
         </button>
         {error && <p className="text-sm text-red-600">{error}</p>}
       </form>
